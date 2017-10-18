@@ -1,0 +1,1 @@
+Python library for calculating and manipulating multipole fields
