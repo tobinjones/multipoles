@@ -1,12 +1,8 @@
-from abc import ABC, abstractmethod
-from .helpers import transparent_numpy, plot_log_errors
-from . import plots
 import numpy as np
+from abc import ABC, abstractmethod
 
-import matplotlib.patches as patches
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from matplotlib.projections.polar import PolarAxes
+from . import plots
+from .helpers import transparent_numpy
 
 
 class Multipoles(ABC):
@@ -129,16 +125,14 @@ class Multipoles(ABC):
         # Return real component
         return W.imag
 
-    def plot_field(self, ax, radius=None, bmax=None):
-        # Default radius of plot to reference radius
-        radius = radius or self.ref_radius
-        plots.plot_complex_field_on_circle(self.complex_field, ax, radius)
-
-    def plot_potential(self, ax, radius=None):
-        raise NotImplementedError()
+    @property
+    def field_at_origin(self):
+        return self.complex_field(0)
 
     def _multipole_table(self, headers=[]):
-        format_exp = lambda a: '${0:.3f}\\times 10^{{{1}}}$'.format(*(lambda m,e: (float(m), f'{int(e):d}' if int(e)<0 else f'{int(e):d}\\;\\;' ))(*'{0:e}'.format(a).split('e')))
+        format_exp = lambda a: '${0:.3f}\\times 10^{{{1}}}$'.format(
+            *(lambda m, e: (float(m), f'{int(e):d}' if int(e) < 0 else f'{int(e):d}\\;\\;'))(
+                *'{0:e}'.format(a).split('e')))
         row_tmpl = '<tr><td>{n}</td><td>{normal}</td><td>{skew}</td></tr>'
         rep = ['<table><thead style="background-color: #efefef">']
         rep += ['<tr><th colspan="3">{0}</th></tr>'.format(h) for h in headers]

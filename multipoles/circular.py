@@ -1,9 +1,11 @@
+from itertools import zip_longest
+
 import numpy as np
+from scipy.special import binom
+
 from .abc import Multipoles
 from .helpers import transparent_numpy
-from . import plots
-from itertools import zip_longest
-from scipy.special import binom
+
 
 class CircularMultipoles(Multipoles):
     def __init__(self, complex_coefficients, ref_radius, d0=0):
@@ -46,10 +48,10 @@ class CircularMultipoles(Multipoles):
         :returns: Field components (F_r, F_phi)
         """
         # convert to complex
-        zs = r*np.exp(1j*phi)
+        zs = r * np.exp(1j * phi)
         field = self.complex_field(zs)
-        #rotate field by phi to convert to radial/azimuthal
-        field_rotated = field*np.exp(1j*phi)
+        # rotate field by phi to convert to radial/azimuthal
+        field_rotated = field * np.exp(1j * phi)
         return field_rotated.imag, field_rotated.real
 
     @transparent_numpy()
@@ -61,7 +63,7 @@ class CircularMultipoles(Multipoles):
         :param y: y
         :returns: Field components (F_x, F_y)
         """
-        field = self.complex_field(x+1j*y)
+        field = self.complex_field(x + 1j * y)
         return field.imag, field.real
 
     @transparent_numpy()
@@ -73,41 +75,39 @@ class CircularMultipoles(Multipoles):
         :returns: complex potential W(x+iy) = A_z(x,y) + i·V(x,y)
         """
         zs = np.expand_dims(z, -1)
-        terms = - self.c * (self._r / self.n) * (zs / self._r)**self.n
+        terms = - self.c * (self._r / self.n) * (zs / self._r) ** self.n
         potential = np.sum(terms, -1) + self._d0
         return potential
 
-    @property
-    def field_at_origin(self):
-        return self.complex_field(0)
-
     @transparent_numpy()
-    def complex_field_error_2(self, z):
+    def complex_field_error_relative_to_origin(self, z):
         f = self.complex_field(z)
         f0 = self.field_at_origin
-        return (f-f0)/f0
+        return (f - f0) / f0
 
-    def complex_field_error(self, n):
+    def complex_field_error_relative_to(self, n):
         fundamental = self.c[n - 1].real
         coeffs = self.c / fundamental
         coeffs[:n] = 0
+
         @transparent_numpy(skip=0)
         def field(z):
             z = np.expand_dims(z, -1)
-            return np.sum(coeffs*(z/self.ref_radius)**(self.n-n), -1)
+            return np.sum(coeffs * (z / self.ref_radius) ** (self.n - n), -1)
+
         return field
 
     def centre(self, n):
-        d = -self.ref_radius * self.c[n-2] / ((n-1)*self.c[n-1])
+        d = -self.ref_radius * self.c[n - 2] / ((n - 1) * self.c[n - 1])
         return d.real, d.imag
 
     def resampled(self, new_radius):
         """returns a copy of this multipole object, at a different reference radius"""
-        new_coefficients = self.c * (new_radius / self.ref_radius)**(self.n - 1)
+        new_coefficients = self.c * (new_radius / self.ref_radius) ** (self.n - 1)
         return CircularMultipoles(new_coefficients, new_radius)
 
     def translated(self, dx=0, dy=0):
-        delta = -(dx + 1j * dy)/self.ref_radius
+        delta = -(dx + 1j * dy) / self.ref_radius
         c_new = np.zeros_like(self.c, dtype=np.complex128)
         for n in range(1, self.N + 1):
             ks = np.arange(n, self.N + 1)
@@ -115,35 +115,41 @@ class CircularMultipoles(Multipoles):
         return CircularMultipoles(c_new, self.ref_radius)
 
     def normalized(self, n):
-        return self / self.normal[n-1]
-
-    def plot_field_error(self, ax, n, scale=0, radius=None):
-        radius = radius or self.ref_radius
-        plots.plot_error_field_on_circle(self.complex_field_error(n), ax, radius, scale=scale,
-                                         title=f"Iso-error plot, $\Delta B / B_{n}$ $(\\times 10^{scale})$")
-
-    def plot_field_error_2(self, ax, scale=0, radius=None):
-        radius = radius or self.ref_radius
-        plots.plot_error_field_on_circle(self.complex_field_error_2, ax, radius, scale=scale, title=f"Iso-error plot")
+        return self / self.normal[n - 1]
 
     @property
     def gradient(self):
+        """ Complex differential of the field
+
+        :return: new multipole field
+        """
         d0 = self.c[0]
         ns = self.n[:-1]
         coefficients = ns * self.c[1:] / self.ref_radius
-        return CircularMultipoles(coefficients, self.ref_radius, d0=d0 )
+        return CircularMultipoles(coefficients, self.ref_radius, d0=d0)
 
     def __add__(self, other):
+        """ Multipole fields are superposable, so adding them just adds their coefficients
+        The new field will have the same reference radius as the left-hand field
+
+        :param other: multipole field
+        :return: new multipole field
+        """
         if not isinstance(other, CircularMultipoles):
             raise TypeError
         # Scale to equal radii
         if not self.ref_radius == other.ref_radius:
             other = other.resampled(self.ref_radius)
         # Add coefficients
-        new_coeffs = [a+b for a,b in zip_longest(self.c, other.c, fillvalue=0)]
+        new_coeffs = [a + b for a, b in zip_longest(self.c, other.c, fillvalue=0)]
         return CircularMultipoles(new_coeffs, self.ref_radius)
 
     def __sub__(self, other):
+        """ Subtracting a multipole field is the same as adding its negation
+
+        :param other:
+        :return: new multipole field
+        """
         negated_other = CircularMultipoles(-other.c, other.ref_radius)
         return self + negated_other
 
@@ -154,14 +160,27 @@ class CircularMultipoles(Multipoles):
         if not self.ref_radius == other.ref_radius:
             other = other.resampled(self.ref_radius)
         # Check all coefficients are equal
-        return all(a==b for a,b in zip_longest(self.c, other.c, fillvalue=0))
+        return all(a == b for a, b in zip_longest(self.c, other.c, fillvalue=0))
 
     def __mul__(self, other):
-        return CircularMultipoles(self.c*other, self.ref_radius)
+        """ A multipole field can be multiplied by a scalar factor
+
+        :param other: scalar number
+        :return: scaled multipole field
+        """
+        return CircularMultipoles(self.c * other, self.ref_radius)
+
+    # Multiplication of scalar and field is commutative
+    # number*field == field*number
     __rmul__ = __mul__
 
     def __truediv__(self, other):
-        return CircularMultipoles(self.c/other, self.ref_radius)
+        """ Dividing a field by a scalar is the same as multiplying by the inverse
+
+        :param other: scalar number
+        :return: scaled multipole field
+        """
+        return CircularMultipoles(self.c / other, self.ref_radius)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -196,19 +215,23 @@ def from_scalar_potential(potential, ref_radius, N=21, num=361):
     c = -1j * 2 * d * n_h / ref_radius
     return CircularMultipoles(c[1:], ref_radius, d0=d[0])
 
+
 def from_polar_coefficients(magnitudes, phases, ref_radius):
     complex_coefficients = magnitudes * np.exp(1j * phases)
     return CircularMultipoles(complex_coefficients, ref_radius)
 
+
 def from_normal_and_skew(normal, skew, ref_radius):
     normal = np.asarray(normal, dtype=np.complex128)
     skew = np.asarray(skew, dtype=np.complex128)
-    return CircularMultipoles(normal+1j*skew, ref_radius)
+    return CircularMultipoles(normal + 1j * skew, ref_radius)
+
 
 def pure_field(n, strength=1):
     coeffs = np.zeros(n, dtype=np.complex128)
     coeffs[n - 1] = strength
     return CircularMultipoles(coeffs, ref_radius=1)
+
 
 pure_dipole = pure_field(1, 1)
 pure_quadrupole = pure_field(2, 1)

@@ -1,4 +1,5 @@
 import numpy as np
+
 from .abc import Multipoles
 from .helpers import transparent_numpy
 
@@ -14,7 +15,7 @@ def from_real_field(field, a, b, N=21, num=361):
         + semi-major axis a is on x axis
 
     """
-    f = np.sqrt(a**2 - b**2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
+    f = np.sqrt(a ** 2 - b ** 2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
     eta0 = np.arctanh(b / a)
     # Values of psi for numerical integration
     psi = np.linspace(-np.pi, np.pi, num)
@@ -43,7 +44,7 @@ def from_complex_field(field, a, b, N=21, num=361):
         + semi-major axis a is on x axis
 
     """
-    f = np.sqrt(a**2 - b**2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
+    f = np.sqrt(a ** 2 - b ** 2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
     eta0 = np.arctanh(b / a)
     # Values of psi for numerical integration
     psi = np.linspace(-np.pi, np.pi, num)
@@ -65,7 +66,7 @@ def from_scalar_potential(potential, a, b, *, N=21, num=361):
     raise Exception('treatment of potential N/A for elliptical multipole expansion')
 
     # TODO This whole thing again
-    f = np.sqrt(a**2 - b**2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
+    f = np.sqrt(a ** 2 - b ** 2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
     eta0 = np.arctanh(b / a)
     # Values of psi for numerical integration
     psi = np.linspace(-np.pi, np.pi, num)
@@ -104,7 +105,7 @@ class EllipticMultipoles(Multipoles):
     @property
     def eccentricity(self):
         # TODO Move this into a 'coordinate system' object
-        return np.sqrt(self._a**2 - self._b**2)
+        return np.sqrt(self._a ** 2 - self._b ** 2)
 
     @property
     def eta0(self):
@@ -124,7 +125,7 @@ class EllipticMultipoles(Multipoles):
         :param z: complex variable z=x+iy
         :returns: complex field F(x+iy) = F_y(x,y) + i·F_x(x,y)
         """
-        f = np.sqrt(self._a**2 - self._b**2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
+        f = np.sqrt(self._a ** 2 - self._b ** 2)  # 'focal distance' or 'linear eccentricity' ATTN != 'eccentricity'
         eta0 = np.arctanh(self._b / self._a)
         w = np.arccosh(z / f)
         ws = np.expand_dims(w, -1)

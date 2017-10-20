@@ -1,10 +1,11 @@
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import copy
-import numpy as np
 from typing import Iterable
+
+import copy
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
 from functools import wraps, partial
-import inspect
+
 
 def transparent_numpy(skip=1):
     """
@@ -16,6 +17,7 @@ def transparent_numpy(skip=1):
     wrapped into a 1-element array before, and transparently unwrapped after.
     keyword arguments are not touched.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -38,12 +40,15 @@ def transparent_numpy(skip=1):
             return res
 
         return wrapper
+
     return decorator
+
 
 _cmap_errors = copy.copy(mpl.pyplot.cm.gray)
 _cmap_errors.set_over('orangered', .5)
 _cmap_errors.set_under('skyblue', .3)
 _cmap_errors.set_bad('g', 1.0)
+
 
 def plot_log_errors(XX, YY, errors, ax, cax=None, exp_max=4):
     # Colormaps
@@ -74,9 +79,9 @@ def plot_log_errors(XX, YY, errors, ax, cax=None, exp_max=4):
                                      ['white'] +
                                      [mapplus.to_rgba(x - 0.5) for x in range(exp_max, 0, -1)])
 
-    bounds = np.arange(-exp_max - 1, exp_max + 2)-0.5
+    bounds = np.arange(-exp_max - 1, exp_max + 2) - 0.5
     print(bounds)
-    #bounds = [-4.5, -3.5, -2.5, -1.5, -.5, .5, 1.5, 2.5, 3.5, 4.5]
+    # bounds = [-4.5, -3.5, -2.5, -1.5, -.5, .5, 1.5, 2.5, 3.5, 4.5]
 
     labels = [r'$-1 \times 10^{' + str(x) + '}$' for x in range(-1, -exp_max - 1, -1)] + \
              [0] + [r'$+1 \times 10^{' + str(x) + '}$' for x in range(-exp_max, 0)]
