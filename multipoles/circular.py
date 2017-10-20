@@ -65,9 +65,6 @@ class CircularMultipoles(Multipoles):
         return field.imag, field.real
 
     @transparent_numpy()
-    def polar_gradient(self, r, phi):
-
-    @transparent_numpy()
     def complex_potential(self, z):
         """
         Complex potential reconstructed from multipole components
@@ -79,6 +76,16 @@ class CircularMultipoles(Multipoles):
         terms = - self.c * (self._r / self.n) * (zs / self._r)**self.n
         potential = np.sum(terms, -1) + self._d0
         return potential
+
+    @property
+    def field_at_origin(self):
+        return self.complex_field(0)
+
+    @transparent_numpy()
+    def complex_field_error_2(self, z):
+        f = self.complex_field(z)
+        f0 = self.field_at_origin
+        return (f-f0)/f0
 
     def complex_field_error(self, n):
         fundamental = self.c[n - 1].real
@@ -114,6 +121,10 @@ class CircularMultipoles(Multipoles):
         radius = radius or self.ref_radius
         plots.plot_error_field_on_circle(self.complex_field_error(n), ax, radius, scale=scale,
                                          title=f"Iso-error plot, $\Delta B / B_{n}$ $(\\times 10^{scale})$")
+
+    def plot_field_error_2(self, ax, scale=0, radius=None):
+        radius = radius or self.ref_radius
+        plots.plot_error_field_on_circle(self.complex_field_error_2, ax, radius, scale=scale, title=f"Iso-error plot")
 
     @property
     def gradient(self):

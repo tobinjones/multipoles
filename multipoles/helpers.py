@@ -14,21 +14,22 @@ def transparent_numpy(skip=1):
     numpy array, but if all the args are scalars, the result will be a scalar.
     Inside the function, the args will ALWAYS BE ARRAYS, so scalars will be
     wrapped into a 1-element array before, and transparently unwrapped after.
+    keyword arguments are not touched.
     """
     def decorator(func):
         @wraps(func)
-        def wrapper(*args):
+        def wrapper(*args, **kwargs):
             """Takes method, returns wrapped version"""
             # partially apply skipped arguments to function
             func_actual = partial(func, *args[:skip])
             args = args[skip:]
             # if all are already numpy arrays, do nothing
             if all(isinstance(a, np.ndarray) for a in args):
-                return func_actual(*args)
+                return func_actual(*args, **kwargs)
             # cast args into numpy arrays
             nargs = [np.atleast_1d(a) for a in args]
             # function gets called with arrays, always
-            res = func_actual(*nargs)
+            res = func_actual(*nargs, **kwargs)
             # cast back to simple python types if all args were scalar
             if not any(isinstance(a, Iterable) for a in args):
                 res = tuple(r.item() for r in res)
