@@ -85,7 +85,7 @@ def plot_log_errors(XX, YY, errors, ax, cax=None, exp_max=4):
 
     labels = [r'$-1 \times 10^{' + str(x) + '}$' for x in range(-1, -exp_max - 1, -1)] + \
              [0] + [r'$+1 \times 10^{' + str(x) + '}$' for x in range(-exp_max, 0)]
-    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.order)
     cb = mpl.colorbar.ColorbarBase(cax, cmap=cmap,
                                    boundaries=bounds,
                                    ticks=bounds,  # optional

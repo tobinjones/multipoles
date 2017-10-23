@@ -112,7 +112,7 @@ class EllipticMultipoles(Multipoles):
         return np.arctanh(self._b / self._a)
 
     @transparent_numpy()
-    def complex_field(self, z):
+    def field(self, z):
         """
         Complex field reconstructed from multipole components
 
@@ -131,8 +131,8 @@ class EllipticMultipoles(Multipoles):
         ws = np.expand_dims(w, -1)
 
         # self.n is 1-based, but here we need 0-based
-        n = self.n - 1
-        terms = self.c * np.cosh(n * ws) / np.cosh(n * eta0)
+        n = self.indices - 1
+        terms = self.coefficients * np.cosh(n * ws) / np.cosh(n * eta0)
         terms = n * n * terms  # FUDGE FACTOR!!!!
         #        terms[0] = terms[0] / 2.0 # FUDGE FACTOR!!!!
         terms[0] = terms[0] / 2.0
@@ -140,7 +140,7 @@ class EllipticMultipoles(Multipoles):
         return field
 
     @transparent_numpy()
-    def complex_potential(self, z):
+    def potential(self, z):
         """
         Complex potential reconstructed from multipole components
 
@@ -152,8 +152,8 @@ class EllipticMultipoles(Multipoles):
         # TODO: Redo this whole method
         w = np.arccosh(z / self.eccentricity)
         eta, psi = w.real, w.imag
-        n = self.n
-        a_terms = self.skew * np.cosh(n * eta) / np.cosh(n * self.eta0) * np.cos(n * psi)
-        b_terms = self.normal * np.sinh(n * eta) / np.sinh(n * self.eta0) * np.sin(n * psi)
+        n = self.indices
+        a_terms = self.skew_coefficients * np.cosh(n * eta) / np.cosh(n * self.eta0) * np.cos(n * psi)
+        b_terms = self.normal_coefficients * np.sinh(n * eta) / np.sinh(n * self.eta0) * np.sin(n * psi)
         pot = self._d0 / 2 + np.sum(a_terms + b_terms, -1)
         return np.atleast_1d(1j * pot)
