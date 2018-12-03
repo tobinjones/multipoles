@@ -28,10 +28,16 @@ class CircularMultipoles(Multipoles):
     @property
     def reference_radius(self):
         return self._r
-
+    
     def centre(self, n):
         d = -self.reference_radius * self.coefficients[n - 2] / ((n - 1) * self.coefficients[n - 1])
         return d.real, d.imag
+    
+    def angle(self, n):
+        angle = -(np.angle(self.coefficients[n-1]))/n
+        return angle
+
+
 
     #
     # Fields
@@ -74,8 +80,7 @@ class CircularMultipoles(Multipoles):
         """
         fundamental = self.coefficients[n - 1].real
         coeffs = self.coefficients / fundamental
-        coeffs[:n] = 0
-
+ 
         @transparent_numpy(skip=0)
         def field(z):
             z = np.expand_dims(z, -1)
@@ -86,14 +91,16 @@ class CircularMultipoles(Multipoles):
     #
     # Derived CircularMultipoles
     #
-
+    
     def resampled(self, new_radius):
         """
         returns a copy of this multipole object, at a different reference radius
         """
         new_coefficients = self.coefficients * (new_radius / self.reference_radius) ** (self.indices - 1)
         return CircularMultipoles(new_coefficients, new_radius)
-
+    
+    at_reference_radius = resampled
+    
     def translated(self, dx=0, dy=0):
         delta = -(dx + 1j * dy) / self.reference_radius
         c_new = np.zeros_like(self.coefficients, dtype=np.complex128)
@@ -101,10 +108,25 @@ class CircularMultipoles(Multipoles):
             ks = np.arange(n, self.order + 1)
             c_new[n - 1] = np.sum(self.coefficients[n - 1:] * binom(ks - 1, n - 1) * delta ** (ks - n))
         return CircularMultipoles(c_new, self.reference_radius)
-
+    
+    def centralized(self, n):
+        x0, y0 = self.centre(n)
+        return self.translated(-x0, -y0)
+    
+    def rotated(self, theta):
+        c_new = [c*np.exp(-1j*(n+1)*theta) for n, c in enumerate(self.coefficients)]
+        return CircularMultipoles(c_new, self.reference_radius)
+    
     def normalized(self, n):
         return self / self.normal_coefficients[n - 1]
 
+    def with_sensitivities(self, sensitivities):
+        """
+        returns a copy of this multipole object, calibrated with sensitivities
+        """
+        new_coefficients = [c/s for c, s in zip(self.coefficients, sensitivities)]
+        return CircularMultipoles(new_coefficients, self.reference_radius)
+    
     @property
     def gradient(self):
         """
@@ -116,7 +138,62 @@ class CircularMultipoles(Multipoles):
         ns = self.indices[:-1]
         coefficients = ns * self.coefficients[1:] / self.reference_radius
         return CircularMultipoles(coefficients, self.reference_radius, d0=d0)
+  
+  
+    #
+    # Assembly Errors
+    #
+    def with_quad_pole_errors(self, radius, dr=0, da=0, dp_deg=0):
+      """
+      Calculates the harmonic errors arising from assembly errors of one pole.
+      See page 75 of Tanabe for more information (this is all from there).
+      Inputs are...
+      aperture: the quad aperture (metres)
+      dr: the radial offset (metres)
+      da: the linear azimuthal offset (metres)
+      dp: the angular azimuthal offset (degrees)
+      """
 
+      dp = dp_deg*np.pi/180
+      
+      # the table columns, copied in.
+      n = np.arange(1,17)
+      xr = np.array([-425e-1,-516e-1,-288e-1,676e-2,108e-1,445e-2,-104e-2,128e-2,125e-2,637e-3,-244e-3,266e-3,227e-3,126e-3,-55e-4,576e-4])/100
+      xa = np.array([746e-2,214e-1,288e-1,231e-1,108e-1,287e-2,104e-2,156e-2,125e-2,581e-3,244e-3,279e-3,227e-3,123e-3,555e-4,582e-4])/100
+      xp = np.array([176e-1,500e-1,660e-1,500e-1,191e-1,0,-306e-2,0,753e-3,0,-362e-3,0,928e-4,0,666e-4,0])/100
+
+      # errors (the epsilons)
+      er = dr/radius
+      ea = da/radius
+      ep = dp
+      
+      # normalized field errors 
+      r_error = 1j*er*xr*n 
+      a_error = ea*xa*n
+      p_error = ep*xp
+      normalized_error = CircularMultipoles((r_error+a_error+p_error)*np.exp(-1j*n*np.pi/4),  radius)
+      fundamental = self.resampled(radius).normal_coefficients[1]
+      
+      # new field
+      return self + normalized_error*fundamental
+    
+    #
+    # Indexing allows extraction of only certain multipoles
+    #
+    def __getitem__(self, key):
+        if isinstance(key,slice):
+            raise NotImplementedError("Slicing is not supported")
+        if key.real and key.imag:
+            raise IndexError("Must be purely real or purely imaginary")
+        if (key.real <= 0) and (key.imag <= 0):
+            raise IndexError(f"{key} is out of range")
+        index = int(abs(key))
+        value = self.coefficients[index-1]
+        component = value.real if key.real else 1j*value.imag
+        new_coeffs = np.zeros(index, dtype=complex)
+        new_coeffs[index-1] = component
+        return CircularMultipoles(new_coeffs, self.reference_radius)
+            
     #
     # Mathematical Operators
     #
@@ -192,11 +269,13 @@ def from_complex_field(field, ref_radius, N=21, num=361):
     # Evaluate field at points
     z = ref_radius * (np.cos(phi) + 1j * np.sin(phi))
     F = np.array(list(map(field, z)))
+    return from_complex_field_at_angles(F, phi, ref_radius, N)
+
+def from_complex_field_at_angles(field_values, phi, ref_radius, N=21):
     # Find n coefficients
     n = np.expand_dims(np.arange(1, N + 1), -1)
-    c = (1 / (2 * np.pi)) * np.trapz(F * np.exp(-1j * (n - 1) * phi), phi)
-    return CircularMultipoles(c, ref_radius)
-
+    c = (1 / (2 * np.pi)) * np.trapz(field_values * np.exp(-1j * (n - 1) * phi), phi)
+    return CircularMultipoles(c, ref_radius)    
 
 def from_scalar_potential(potential, ref_radius, N=21, num=361):
     # Values of phi for numerical integration
@@ -205,13 +284,19 @@ def from_scalar_potential(potential, ref_radius, N=21, num=361):
     x = ref_radius * np.cos(phi)
     y = ref_radius * np.sin(phi)
     V = potential(x, y)
+    return from_scalar_potential_at_angles(V, phi, ref_radius, N)
+
+def from_scalar_potential_at_angles(potentials, phi, ref_radius, N=21):
+    """ Calculate circular multipoles from a set of (potential, angle) pairs. 
+    Phi is in radians
+    """
+    total_angle = (np.max(phi) - np.min(phi))
     # Find n coefficients
     n_h = np.arange(0, N + 1)
     n_v = np.expand_dims(n_h, -1)
-    d = (1 / (2 * np.pi)) * np.trapz(V * np.exp(-1j * n_v * phi), phi)
+    d = (1 / total_angle) * np.trapz(potentials * np.exp(-1j * n_v * phi), phi)
     c = -1j * 2 * d * n_h / ref_radius
     return CircularMultipoles(c[1:], ref_radius, d0=d[0])
-
 
 def from_polar_coefficients(magnitudes, phases, ref_radius):
     complex_coefficients = magnitudes * np.exp(1j * phases)
@@ -237,64 +322,3 @@ skew_dipole = pure_field(1, 1j)
 skew_quadrupole = pure_field(2, 1j)
 skew_sextupole = pure_field(3, 1j)
 skew_octopole = pure_field(4, 1j)
-
-
-quad_errors = SimpleNamespace()
-
-def from_mechanical_errors(dr=0,da=0,dp_deg=0,aperture=25e-3,GFR=5e-3,Bn=np.zeros(16)):
-    """
-    G_magic_number = magnets.quad_assembly_errors(dr=0,da=0,dp_deg=0,aperture=25e-3,GFR=5e-3,Bn=np.zeros(16))
-    
-    Calculates the harmonic errors arising from assembly errors of one pole.
-    See page 75 of Tanabe for more information (this is all from there).
-    Inputs are...
-    dr: the radial offset (metres)
-    da: the linear azimuthal offset (metres)
-    dp: the angular azimuthal offset (degrees)
-    aperture: the quad aperture (metres)
-    GFR: good-field-region radius (metres)
-    Bn: the harmonics from a model (up to order 16)
-    """
-    
-    dp = dp_deg*np.pi/180
-
-    n = np.arange(1,17)
-    xr = np.array([-425e-1,-516e-1,-288e-1,676e-2,108e-1,445e-2,-104e-2,128e-2,125e-2,637e-3,-244e-3,266e-3,227e-3,126e-3,-55e-4,576e-4])/100
-    xa = np.array([746e-2,214e-1,288e-1,231e-1,108e-1,287e-2,104e-2,156e-2,125e-2,581e-3,244e-3,279e-3,227e-3,123e-3,555e-4,582e-4])/100
-    xp = np.array([176e-1,500e-1,660e-1,500e-1,191e-1,0,-306e-2,0,753e-3,0,-362e-3,0,928e-4,0,666e-4,0])/100
-    # the table columns, copied in.
-       
-    er = dr/aperture
-    ea = da/aperture
-    ep = dp
-    # errors (the epsilons)
-    
-    scaly = (GFR/aperture)**(n-2)
-    # scale factor for scaling to 3mm
-    
-    r_error = (1j*er*xr*n) * np.exp(-1j*n*np.pi/4) * scaly
-    a_error = (ea*xa*n) * np.exp(-1j*n*np.pi/4) * scaly 
-    p_error = (ep*xp) * np.exp(-1j*n*np.pi/4) * scaly
-    total_error = r_error + a_error + p_error
-    # normalized errors 
-    
-    Rr = r_error.real
-    Ra = a_error.real
-    Rp = p_error.real
-    RRR = total_error.real
-    Ir = r_error.imag
-    Ia = a_error.imag
-    Ip = p_error.imag
-    III = total_error.imag
-    # real and imaginary parts
-    
-    Bn_design = Bn
-    An_design = np.zeros_like(Bn_design)
-    TOTAL_BN = Bn_design + RRR*Bn[1]
-    TOTAL_AN = An_design + III*Bn[1]
-    
-    magic_angular, magic_linear, magic_optivus = quad_uniformities_2017(TOTAL_BN,TOTAL_AN,GFR,GFR)
-    print(f'(dr,da,dp) = ({dr*1e6:0.0f}um,{da*1e6:0.0f}um,{dp*180/np.pi*1e3:0.0f}md): uniformity magic number is {magic_optivus:0.04f} pp10k')
-    
-    return magic_optivus, RRR*Bn[1], III*Bn[1]
-
